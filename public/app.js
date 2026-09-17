@@ -158,8 +158,16 @@ createApp({
   template: `
     <header>
       <div>
-        <span class="eyebrow">e-ink · spectra 6</span>
-        <h1>Holiday Display Picker</h1>
+        <span class="eyebrow">e-ink print picker</span>
+        <h1>Holiday Display</h1>
+      </div>
+      <div class="palette-strip" title="Spectra 6 panel palette">
+        <span class="swatch" style="--c:#000000"></span>
+        <span class="swatch" style="--c:#FFFFFF"></span>
+        <span class="swatch" style="--c:#FF0000"></span>
+        <span class="swatch" style="--c:#FFF200"></span>
+        <span class="swatch" style="--c:#0000FF"></span>
+        <span class="swatch" style="--c:#00A651"></span>
       </div>
       <div class="status" v-if="selectedPhoto">{{ selectedPhoto }}</div>
     </header>
@@ -172,7 +180,7 @@ createApp({
           </template>
         </div>
         <div class="folder-row" v-for="f in folders" :key="f" @click="openFolder(f)">
-          <span>📁 {{ f }}</span>
+          <span class="folder-mark">▸</span><span>{{ f }}</span>
         </div>
         <div v-if="!folders.length" class="empty-state">no subfolders</div>
       </aside>
@@ -180,7 +188,7 @@ createApp({
       <section class="main">
         <div class="grid-toolbar">
           <span class="path">{{ folder || '/' }} · {{ photoCount }} photo(s) here</span>
-          <button class="secondary" v-if="photoCount" @click="pickRandomFromFolder">🎲 random from this folder</button>
+          <button class="secondary" v-if="photoCount" @click="pickRandomFromFolder">shuffle this folder</button>
         </div>
         <div class="grid" v-if="photos.length">
           <div
