@@ -157,7 +157,10 @@ createApp({
   },
   template: `
     <header>
-      <h1>Holiday Display Picker</h1>
+      <div>
+        <span class="eyebrow">e-ink · spectra 6</span>
+        <h1>Holiday Display Picker</h1>
+      </div>
       <div class="status" v-if="selectedPhoto">{{ selectedPhoto }}</div>
     </header>
     <div class="layout">
