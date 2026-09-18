@@ -74,6 +74,14 @@ bool checkAndUpdateDisplay() {
     Serial.println("HTTP begin failed");
     return false;
   }
+  // ESP32 HTTPClient only exposes headers via http.header() that were
+  // explicitly requested here first - ETag isn't one of the handful it
+  // collects by default. Without this, http.header("ETag") below always
+  // returns "", lastEtag never gets set, If-None-Match never gets sent,
+  // and the server returns a fresh 200 on every single check.
+  const char *headerKeys[] = {"ETag"};
+  http.collectHeaders(headerKeys, 1);
+
   if (lastEtag.length() > 0) {
     http.addHeader("If-None-Match", lastEtag);
   }
