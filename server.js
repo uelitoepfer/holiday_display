@@ -10,7 +10,7 @@ import { ditherToSpectra6, filterByOrientation } from "./lib/dither.js";
 import {
   assertNasMounted,
   resolveFolder,
-  listSubfolders,
+  listFoldersRecursive,
   listPhotosInFolder,
   listPhotosRecursive,
   toRelPath,
@@ -36,19 +36,24 @@ function handleErrors(fn) {
   };
 }
 
-// Browse: subfolders + photo count at a given relative path under the NAS root.
+// Browse: photos directly inside a given relative folder under the NAS root.
 app.get("/api/browse", handleErrors(async (req, res) => {
   assertNasMounted();
   const relFolder = req.query.folder || "";
   const dir = resolveFolder(relFolder);
-  const folders = listSubfolders(dir);
   const photos = listPhotosInFolder(dir);
   res.json({
     folder: relFolder,
-    folders,
     photoCount: photos.length,
     photos: photos.map((p) => ({ rel: toRelPath(p), name: p.split("/").pop() })),
   });
+}));
+
+// Every folder under the NAS root, flattened, for the folder-picker dropdown.
+app.get("/api/folders", handleErrors(async (req, res) => {
+  assertNasMounted();
+  const folders = listFoldersRecursive(NAS_PHOTOS_ROOT).map(toRelPath).sort();
+  res.json({ folders });
 }));
 
 // Recursive photo count for a folder, used before committing to "random from this folder".

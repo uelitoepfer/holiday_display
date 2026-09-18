@@ -11,7 +11,7 @@ function debounce(fn, ms) {
 createApp({
   setup() {
     const folder = ref("");
-    const folders = ref([]);
+    const allFolders = ref([]);
     const photos = ref([]);
     const photoCount = ref(0);
     const carouselIndex = ref(0);
@@ -35,8 +35,14 @@ createApp({
     const autoShuffle = reactive({ enabled: false, folder: "", intervalMinutes: 60, orientation: "either" });
     const savingAutoShuffle = ref(false);
 
-    const breadcrumbParts = computed(() => (folder.value ? folder.value.split("/") : []));
     const currentPhoto = computed(() => photos.value[carouselIndex.value] || null);
+
+    async function loadFolderList() {
+      const res = await fetch("/api/folders");
+      if (!res.ok) return;
+      const data = await res.json();
+      allFolders.value = data.folders;
+    }
 
     async function loadFolder(rel) {
       errorMessage.value = "";
@@ -47,24 +53,10 @@ createApp({
       }
       const data = await res.json();
       folder.value = data.folder;
-      folders.value = data.folders;
       photos.value = data.photos;
       photoCount.value = data.photoCount;
       carouselIndex.value = 0;
       showCarousel.value = false;
-    }
-
-    function openFolder(name) {
-      const next = folder.value ? `${folder.value}/${name}` : name;
-      loadFolder(next);
-    }
-
-    function goToBreadcrumb(index) {
-      loadFolder(breadcrumbParts.value.slice(0, index + 1).join("/"));
-    }
-
-    function goRoot() {
-      loadFolder("");
     }
 
     function openCarousel(index) {
@@ -204,16 +196,17 @@ createApp({
       const settings = await (await fetch("/api/settings")).json();
       Object.assign(params, settings.params);
       Object.assign(autoShuffle, settings.autoShuffle);
+      await loadFolderList();
       await loadFolder(settings.folder || "");
     });
 
     return {
-      folder, folders, photos, photoCount, breadcrumbParts,
+      folder, allFolders, photos, photoCount,
       carouselIndex, currentPhoto, showCarousel, openCarousel, closeCarousel, prevPhoto, nextPhoto, tuneCurrentPhoto,
       selectedPhoto, previewUrl, previewLoading,
       applying, applyMessage, errorMessage,
       params, autoShuffle, savingAutoShuffle,
-      openFolder, goToBreadcrumb, goRoot,
+      loadFolder,
       selectPhoto, pickRandomFromFolder,
       resetParams, applyToDisplay, closeDrawer, saveAutoShuffle,
     };
@@ -234,22 +227,12 @@ createApp({
       </div>
     </header>
     <div class="layout">
-      <aside class="sidebar">
-        <div class="folder-nav">
-          <button class="home-btn" @click="goRoot" title="all folders">⌂</button>
-          <template v-for="(part, i) in breadcrumbParts" :key="i">
-            <span class="crumb-sep">/</span>
-            <button class="crumb-btn" @click="goToBreadcrumb(i)">{{ part }}</button>
-          </template>
-        </div>
-        <div class="folder-row" v-for="f in folders" :key="f" @click="openFolder(f)">
-          <span class="folder-mark">▸</span><span>{{ f }}</span>
-        </div>
-        <div v-if="!folders.length" class="empty-state">no subfolders</div>
-      </aside>
-
       <section class="main">
         <div class="grid-toolbar">
+          <select class="folder-select" v-model="folder" @change="loadFolder(folder)">
+            <option value="">/ (top level)</option>
+            <option v-for="f in allFolders" :key="f" :value="f">{{ f }}</option>
+          </select>
           <span class="path">{{ photoCount }} photo(s) here</span>
           <button class="secondary" v-if="photoCount" @click="pickRandomFromFolder">shuffle now</button>
         </div>
@@ -265,7 +248,7 @@ createApp({
             <img :src="'/api/image?path=' + encodeURIComponent(p.rel)" loading="lazy" :alt="p.name" />
           </div>
         </div>
-        <div v-else class="empty-state">no photos in this folder - drill into a subfolder</div>
+        <div v-else class="empty-state">no photos directly in this folder - pick another from the dropdown</div>
 
         <div class="auto-shuffle-bar">
           <span class="auto-shuffle-label">auto-shuffle this folder every</span>
