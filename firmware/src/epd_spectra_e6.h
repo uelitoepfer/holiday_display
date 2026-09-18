@@ -3,6 +3,14 @@
 #include <Arduino.h>
 #include <SPI.h>
 
+// VSPI doesn't exist on ESP32-S3/C3 (only FSPI/HSPI there) - pick whichever
+// dedicated bus is available for this variant.
+#if defined(VSPI)
+#define EPD_SPI_BUS VSPI
+#else
+#define EPD_SPI_BUS HSPI
+#endif
+
 // Driver for the Waveshare 7.3" ACeP Spectra 6 / E6 e-paper panel (800x480,
 // true 6-color: black/white/yellow/red/blue/green).
 //
@@ -56,5 +64,5 @@ class EpdSpectraE6 {
   int busyPin_ = -1;
   uint16_t width_ = 800;
   uint16_t height_ = 480;
-  SPIClass spi_{VSPI};
+  SPIClass spi_{EPD_SPI_BUS};
 };
