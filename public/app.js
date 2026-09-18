@@ -38,16 +38,58 @@ createApp({
 
     const currentPhoto = computed(() => photos.value[carouselIndex.value] || null);
 
-    // Flat paths -> an indented tree, so nested folders are visible at a
-    // glance without drilling in. Alphabetical sort naturally groups every
-    // "Trip A/..." entry right after "Trip A", so depth = segment count is
-    // enough to indent correctly without building a real tree structure.
+    // Which folders are expanded in the sidebar tree. Empty by default -
+    // only top-level folders show until you click one open.
+    const expandedPaths = reactive(new Set());
+
+    // Every path that is some other folder's parent, so leaf folders don't
+    // get a (non-functional) expand toggle.
+    const parentPaths = computed(() => {
+      const set = new Set();
+      for (const f of allFolders.value) {
+        const parts = f.split("/");
+        for (let i = 1; i < parts.length; i++) set.add(parts.slice(0, i).join("/"));
+      }
+      return set;
+    });
+
+    // Flat paths -> an indented tree. Alphabetical sort naturally groups
+    // every "Trip A/..." entry right after "Trip A", so depth = segment
+    // count is enough to indent correctly without a real tree structure.
     const folderTree = computed(() =>
       [...allFolders.value].sort().map((path) => {
         const parts = path.split("/");
-        return { path, name: parts[parts.length - 1], depth: parts.length - 1 };
+        return {
+          path,
+          name: parts[parts.length - 1],
+          depth: parts.length - 1,
+          hasChildren: parentPaths.value.has(path),
+        };
       })
     );
+
+    // Only the rows whose full ancestor chain is expanded.
+    const visibleFolderTree = computed(() =>
+      folderTree.value.filter((f) => {
+        const parts = f.path.split("/");
+        for (let i = 1; i < parts.length; i++) {
+          if (!expandedPaths.has(parts.slice(0, i).join("/"))) return false;
+        }
+        return true;
+      })
+    );
+
+    function selectFolder(f) {
+      loadFolder(f.path);
+      if (f.hasChildren) {
+        if (expandedPaths.has(f.path)) expandedPaths.delete(f.path);
+        else expandedPaths.add(f.path);
+      }
+    }
+
+    function collapseAllFolders() {
+      expandedPaths.clear();
+    }
 
     async function loadFolderList() {
       const res = await fetch("/api/folders");
@@ -224,7 +266,7 @@ createApp({
     });
 
     return {
-      folder, folderTree, photos, photoCount,
+      folder, visibleFolderTree, expandedPaths, selectFolder, collapseAllFolders, photos, photoCount,
       carouselIndex, currentPhoto, showCarousel, openCarousel, closeCarousel, prevPhoto, nextPhoto, tuneCurrentPhoto,
       selectedPhoto, photoOrientation, previewUrl, previewLoading,
       applying, applyMessage, errorMessage,
@@ -251,16 +293,23 @@ createApp({
     </header>
     <div class="layout">
       <aside class="sidebar">
-        <div class="folder-row" :class="{ active: folder === '' }" @click="loadFolder('')">/ (top level)</div>
+        <div class="sidebar-header">
+          <div class="folder-row root-row" :class="{ active: folder === '' }" @click="loadFolder('')">/ (top level)</div>
+          <button class="collapse-all-btn" @click="collapseAllFolders" title="collapse all folders">collapse all</button>
+        </div>
         <div
           class="folder-row"
-          v-for="f in folderTree"
+          v-for="f in visibleFolderTree"
           :key="f.path"
           :style="{ paddingLeft: (10 + f.depth * 16) + 'px' }"
           :class="{ active: folder === f.path }"
           :title="f.path"
-          @click="loadFolder(f.path)"
-        >{{ f.name }}</div>
+          @click="selectFolder(f)"
+        >
+          <span class="folder-toggle" v-if="f.hasChildren">{{ expandedPaths.has(f.path) ? '▾' : '▸' }}</span>
+          <span class="folder-toggle" v-else></span>
+          {{ f.name }}
+        </div>
       </aside>
 
       <section class="main">

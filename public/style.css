@@ -93,7 +93,30 @@ header h1 {
   padding: 10px;
 }
 
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.sidebar-header .folder-row { flex: 1; }
+
+.collapse-all-btn {
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  font-family: inherit;
+  flex-shrink: 0;
+}
+.collapse-all-btn:hover { border-color: var(--accent); color: var(--accent); }
+
 .folder-row {
+  display: flex;
+  align-items: center;
   padding: 9px 10px;
   border-radius: 6px;
   cursor: pointer;
@@ -103,6 +126,13 @@ header h1 {
 }
 .folder-row:hover { background: var(--panel-raised); color: var(--ink); }
 .folder-row.active { background: var(--panel-raised); color: var(--accent); font-weight: 500; }
+.folder-toggle {
+  display: inline-block;
+  width: 14px;
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--muted);
+}
 
 .main {
   flex: 1;
