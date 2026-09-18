@@ -18,6 +18,7 @@ createApp({
     const showCarousel = ref(false);
 
     const selectedPhoto = ref(""); // rel path, once sent to the tuning drawer
+    const photoOrientation = ref(""); // "landscape" | "portrait" | ""
     const previewUrl = ref("");
     const previewLoading = ref(false);
     const applying = ref(false);
@@ -94,8 +95,15 @@ createApp({
 
     async function selectPhoto(rel) {
       selectedPhoto.value = rel;
+      photoOrientation.value = "";
       applyMessage.value = "";
       errorMessage.value = "";
+      fetch(`/api/orientation?path=${encodeURIComponent(rel)}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data) photoOrientation.value = data.orientation;
+        })
+        .catch(() => {});
       await refreshPreview();
     }
 
@@ -155,6 +163,7 @@ createApp({
 
     function closeDrawer() {
       selectedPhoto.value = "";
+      photoOrientation.value = "";
       if (previewUrl.value) URL.revokeObjectURL(previewUrl.value);
       previewUrl.value = "";
     }
@@ -217,7 +226,7 @@ createApp({
     return {
       folder, folderTree, photos, photoCount,
       carouselIndex, currentPhoto, showCarousel, openCarousel, closeCarousel, prevPhoto, nextPhoto, tuneCurrentPhoto,
-      selectedPhoto, previewUrl, previewLoading,
+      selectedPhoto, photoOrientation, previewUrl, previewLoading,
       applying, applyMessage, errorMessage,
       params, autoShuffle, savingAutoShuffle,
       loadFolder,
@@ -304,6 +313,7 @@ createApp({
         <div class="preview-frame">
           <img v-if="previewUrl" :src="previewUrl" alt="dithered preview" />
           <div class="spinner" v-if="previewLoading">rendering…</div>
+          <span class="orientation-badge" v-if="photoOrientation">{{ photoOrientation }}</span>
         </div>
 
         <div class="control">

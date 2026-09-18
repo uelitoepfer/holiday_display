@@ -319,6 +319,21 @@ header h1 {
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
+.orientation-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 4px 8px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(2px);
+}
 
 .control { margin-top: 16px; }
 .control label {

@@ -6,7 +6,7 @@ import {
   OUT_PATH,
   SETTINGS_PATH,
 } from "./lib/config.js";
-import { ditherToSpectra6, filterByOrientation } from "./lib/dither.js";
+import { ditherToSpectra6, filterByOrientation, getOrientation } from "./lib/dither.js";
 import {
   assertNasMounted,
   resolveFolder,
@@ -77,6 +77,12 @@ app.get("/api/image", handleErrors(async (req, res) => {
 app.get("/display.png", handleErrors(async (req, res) => {
   res.setHeader("Content-Type", "image/png");
   res.send(readFileSync(OUT_PATH));
+}));
+
+// Landscape/portrait for a single photo, for the marker shown in the tuning drawer.
+app.get("/api/orientation", handleErrors(async (req, res) => {
+  const abs = fromRelPath(req.query.path || "");
+  res.json(await getOrientation(abs));
 }));
 
 // Renders a photo through the dither pipeline with the given (possibly
