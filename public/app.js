@@ -37,9 +37,23 @@ createApp({
 
     const currentPhoto = computed(() => photos.value[carouselIndex.value] || null);
 
+    // Flat paths -> an indented tree, so nested folders are visible at a
+    // glance without drilling in. Alphabetical sort naturally groups every
+    // "Trip A/..." entry right after "Trip A", so depth = segment count is
+    // enough to indent correctly without building a real tree structure.
+    const folderTree = computed(() =>
+      [...allFolders.value].sort().map((path) => {
+        const parts = path.split("/");
+        return { path, name: parts[parts.length - 1], depth: parts.length - 1 };
+      })
+    );
+
     async function loadFolderList() {
       const res = await fetch("/api/folders");
-      if (!res.ok) return;
+      if (!res.ok) {
+        errorMessage.value = (await res.json()).error || "failed to load folder list";
+        return;
+      }
       const data = await res.json();
       allFolders.value = data.folders;
     }
@@ -201,7 +215,7 @@ createApp({
     });
 
     return {
-      folder, allFolders, photos, photoCount,
+      folder, folderTree, photos, photoCount,
       carouselIndex, currentPhoto, showCarousel, openCarousel, closeCarousel, prevPhoto, nextPhoto, tuneCurrentPhoto,
       selectedPhoto, previewUrl, previewLoading,
       applying, applyMessage, errorMessage,
@@ -231,11 +245,13 @@ createApp({
         <div class="folder-row" :class="{ active: folder === '' }" @click="loadFolder('')">/ (top level)</div>
         <div
           class="folder-row"
-          v-for="f in allFolders"
-          :key="f"
-          :class="{ active: folder === f }"
-          @click="loadFolder(f)"
-        >{{ f }}</div>
+          v-for="f in folderTree"
+          :key="f.path"
+          :style="{ paddingLeft: (10 + f.depth * 16) + 'px' }"
+          :class="{ active: folder === f.path }"
+          :title="f.path"
+          @click="loadFolder(f.path)"
+        >{{ f.name }}</div>
       </aside>
 
       <section class="main">
