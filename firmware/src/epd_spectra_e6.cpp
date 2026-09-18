@@ -24,9 +24,22 @@ void EpdSpectraE6::begin(int csPin, int dcPin, int rstPin, int busyPin, int sckP
 }
 
 // BUSY is LOW while the panel is busy, HIGH when idle/ready - see the class
-// comment for how that polarity was confirmed.
-void EpdSpectraE6::waitBusy_() {
+// comment for how that polarity was confirmed. A disconnected or wrongly-
+// wired BUSY pin floats and can read LOW forever, which would otherwise
+// hang here silently with no indication why - so this gives up (and says
+// so) after a generous timeout instead of blocking indefinitely. 60s comfortably
+// covers even the long post-refresh wait for a real e-ink redraw.
+void EpdSpectraE6::waitBusy_(const char *stage) {
+  const uint32_t TIMEOUT_MS = 60000;
+  uint32_t start = millis();
   while (digitalRead(busyPin_) == LOW) {
+    if (millis() - start > TIMEOUT_MS) {
+      Serial.printf(
+          "[epd] WARNING: busy-wait timed out after %lums during '%s' - "
+          "check BUSY pin wiring (expected GPIO%d)\n",
+          (unsigned long) TIMEOUT_MS, stage, busyPin_);
+      return;
+    }
     delay(5);
   }
 }
@@ -38,7 +51,7 @@ void EpdSpectraE6::reset_() {
   delay(10);
   digitalWrite(rstPin_, HIGH);
   delay(20);
-  waitBusy_();
+  waitBusy_("reset");
 }
 
 void EpdSpectraE6::sendCommand_(uint8_t cmd) {
@@ -125,16 +138,24 @@ void EpdSpectraE6::deepSleep_() {
 // REFRESH_SCREEN -> POWER_OFF -> DEEP_SLEEP. The long wait - the actual
 // multi-second e-ink refresh - happens between REFRESH_SCREEN and POWER_OFF.
 void EpdSpectraE6::displayImage(const uint8_t *data, size_t length) {
+  Serial.println("[epd] reset");
   reset_();
+  Serial.println("[epd] init sequence");
   initSequence_();
-  waitBusy_();
+  waitBusy_("post-init");
+  Serial.println("[epd] transferring image data");
   transferImage_(data, length);
-  waitBusy_();
+  waitBusy_("post-transfer");
+  Serial.println("[epd] power on");
   powerOn_();
-  waitBusy_();
+  waitBusy_("post-power-on");
+  Serial.println("[epd] refresh (this is the long e-ink redraw)");
   refresh_();
-  waitBusy_();
+  waitBusy_("post-refresh");
+  Serial.println("[epd] power off");
   powerOff_();
-  waitBusy_();
+  waitBusy_("post-power-off");
+  Serial.println("[epd] deep sleep");
   deepSleep_();
+  Serial.println("[epd] sequence complete");
 }

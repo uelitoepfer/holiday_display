@@ -48,7 +48,10 @@ class EpdSpectraE6 {
 
  private:
   void reset_();
-  void waitBusy_();
+  // Logs a warning and gives up after a timeout instead of hanging forever -
+  // a disconnected/miswired BUSY pin should be diagnosable from the serial
+  // log, not just an unexplained silent hang.
+  void waitBusy_(const char *stage);
   void sendCommand_(uint8_t cmd);
   void sendCommandData_(uint8_t cmd, const uint8_t *data, size_t len);
   void initSequence_();
