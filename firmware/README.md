@@ -21,20 +21,28 @@ image" logic seems to hang or misbehave, that's the first thing to check -
 
 ## Wiring
 
-Default pins match Waveshare's own ESP32 e-Paper driver board:
+Default pins target an ESP32-S3-DevKitC-1 board:
 
 | Signal | GPIO |
 |--------|------|
-| CS     | 15   |
-| DC     | 27   |
-| RST    | 26   |
-| BUSY   | 25   |
-| SCK    | 13   |
-| MOSI (DIN) | 14 |
+| CS     | 10   |
+| DC     | 9    |
+| RST    | 14   |
+| BUSY   | 13   |
+| SCK    | 12   |
+| MOSI (DIN) | 11 |
 
 Override with `-D EPD_CS_PIN=...` etc. in `platformio.ini`'s `build_flags`
 if you wired it differently. No MISO connection is needed (the panel is
 write-only from the ESP's perspective).
+
+**On any ESP32-S3 board, never use GPIO26-32 for anything.** On N8/N16
+modules those pins are wired internally to the flash/PSRAM chip; using one
+as a GPIO (as an earlier version of this firmware did, copying pin defaults
+from Waveshare's plain-ESP32 driver board) corrupts flash access and
+crashes the chip almost immediately - visible as a silent reboot loop
+(`rst:0x8 (TG1WDT_SYS_RST)`) with no crash log, right after boot. Also
+avoid GPIO19/20 (native USB D-/D+) and GPIO0/3/45/46 (strapping pins).
 
 ## Setup
 

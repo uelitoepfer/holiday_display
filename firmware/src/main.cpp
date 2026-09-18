@@ -9,26 +9,30 @@
 #define HTTP_CODE_NOT_MODIFIED 304
 #endif
 
-// Default pinout matches Waveshare's own ESP32 e-Paper driver board, used
-// across their epd7in3f/epd7in3g demos. Override here if you wired it
-// differently.
+// Default pinout for an ESP32-S3-DevKitC-1 board. Deliberately avoids:
+// GPIO26-32 (wired to the flash/PSRAM chip on N8/N16 modules - toggling
+// these as GPIO corrupts flash access and crashes the chip almost
+// immediately, seen as a silent TG1WDT_SYS_RST reboot loop with no
+// crash log), GPIO19/20 (native USB D-/D+), and GPIO0/3/45/46
+// (strapping pins). Override here if you wired it differently, and
+// avoid that same GPIO26-32 range on any S3 board.
 #ifndef EPD_CS_PIN
-#define EPD_CS_PIN 15
+#define EPD_CS_PIN 10
 #endif
 #ifndef EPD_DC_PIN
-#define EPD_DC_PIN 27
+#define EPD_DC_PIN 9
 #endif
 #ifndef EPD_RST_PIN
-#define EPD_RST_PIN 26
+#define EPD_RST_PIN 14
 #endif
 #ifndef EPD_BUSY_PIN
-#define EPD_BUSY_PIN 25
+#define EPD_BUSY_PIN 13
 #endif
 #ifndef EPD_SCK_PIN
-#define EPD_SCK_PIN 13
+#define EPD_SCK_PIN 12
 #endif
 #ifndef EPD_MOSI_PIN
-#define EPD_MOSI_PIN 14
+#define EPD_MOSI_PIN 11
 #endif
 
 #define PANEL_WIDTH 800
