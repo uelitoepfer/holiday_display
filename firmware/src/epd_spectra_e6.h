@@ -12,16 +12,15 @@
 #endif
 
 // Driver for the Waveshare 7.3" ACeP Spectra 6 / E6 e-paper panel (800x480,
-// true 6-color: black/white/yellow/red/blue/green).
+// true 6-color: black/white/yellow/red/blue/green), as used on the Seeed
+// XIAO ePaper EE04 expansion board.
 //
-// Command bytes, init sequence, color codes and the reset/busy timing here
-// are taken from ESPHome's epaper_spi_spectra_e6 component (esphome/esphome,
-// esphome/components/epaper_spi/{epaper_spi_spectra_e6.*, models/spectra_e6.py}),
-// which is a maintained, working driver for this exact panel - not guessed
-// from a datasheet. The busy-pin polarity (LOW = busy, HIGH = idle) matches
-// both that source (via its reTerminal preset's explicit `inverted: true`,
-// which corrects for ESPHome's opposite default assumption) and Waveshare's
-// own epd7in3g Arduino demo comment ("LOW: busy, HIGH: idle").
+// Command bytes, the wire-level color codes (0=black, 1=white, 2=yellow,
+// 3=red, 5=blue, 6=green), init sequence and busy-pin polarity here were
+// cross-validated against two independent sources for the same ED2208/
+// GDEP073E01 silicon: ESPHome's epaper_spi_spectra_e6 component, and
+// Seeed's own Seeed_GFX2 library (Driver_ED2208::colorGet's index -> wire
+// code translation table). Not guessed from a datasheet.
 //
 // Untested against real hardware - the protocol is faithfully reproduced,
 // but please verify pixel colors and orientation on your actual panel.

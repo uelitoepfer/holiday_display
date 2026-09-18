@@ -9,30 +9,36 @@
 #define HTTP_CODE_NOT_MODIFIED 304
 #endif
 
-// Default pinout for an ESP32-S3-DevKitC-1 board. Deliberately avoids:
-// GPIO26-32 (wired to the flash/PSRAM chip on N8/N16 modules - toggling
-// these as GPIO corrupts flash access and crashes the chip almost
-// immediately, seen as a silent TG1WDT_SYS_RST reboot loop with no
-// crash log), GPIO19/20 (native USB D-/D+), and GPIO0/3/45/46
-// (strapping pins). Override here if you wired it differently, and
-// avoid that same GPIO26-32 range on any S3 board.
+// Real pin mapping for the Seeed XIAO ePaper EE04 expansion board (XIAO
+// ESP32-S3), decoded from Seeed_GFX2's Config_XIAO_ePaper_EE04_Board ->
+// esp32DisplayPins(10, -1) -> BoardPinConfig, cross-referenced against the
+// XIAO ESP32S3's D-pin aliases (D8=GPIO7, D10=GPIO9) in Arduino-ESP32's
+// variants/XIAO_ESP32S3/pins_arduino.h. None of these fall in ESP32-S3's
+// flash/PSRAM-reserved GPIO26-32 range.
 #ifndef EPD_CS_PIN
-#define EPD_CS_PIN 10
+#define EPD_CS_PIN 44
 #endif
 #ifndef EPD_DC_PIN
-#define EPD_DC_PIN 9
+#define EPD_DC_PIN 10
 #endif
 #ifndef EPD_RST_PIN
-#define EPD_RST_PIN 14
+#define EPD_RST_PIN 38
 #endif
 #ifndef EPD_BUSY_PIN
-#define EPD_BUSY_PIN 13
+#define EPD_BUSY_PIN 4
 #endif
 #ifndef EPD_SCK_PIN
-#define EPD_SCK_PIN 12
+#define EPD_SCK_PIN 7  // XIAO D8
 #endif
 #ifndef EPD_MOSI_PIN
-#define EPD_MOSI_PIN 11
+#define EPD_MOSI_PIN 9  // XIAO D10
+#endif
+
+// The EE04 board gates the display's power rail behind this pin - nothing
+// on the panel responds to anything until it's driven HIGH. Easy to miss
+// since it's a board-level detail, not part of the e-paper protocol itself.
+#ifndef EPD_ENABLE_PIN
+#define EPD_ENABLE_PIN 43
 #endif
 
 #define PANEL_WIDTH 800
@@ -46,7 +52,6 @@ static const uint32_t CHECK_INTERVAL_MS = 10UL * 1000UL;
 EpdSpectraE6 epd;
 String lastEtag = "";
 uint32_t lastCheckMs = 0;
-bool firstCheckDone = false;
 
 void connectWiFi() {
   WiFi.mode(WIFI_STA);
@@ -142,6 +147,10 @@ void setup() {
   Serial.begin(115200);
   delay(200);
   Serial.println("\nHoliday Display ESP starting up");
+
+  pinMode(EPD_ENABLE_PIN, OUTPUT);
+  digitalWrite(EPD_ENABLE_PIN, HIGH);
+  delay(50);  // let the display's power rail settle before talking to it
 
   epd.begin(EPD_CS_PIN, EPD_DC_PIN, EPD_RST_PIN, EPD_BUSY_PIN, EPD_SCK_PIN, EPD_MOSI_PIN,
             PANEL_WIDTH, PANEL_HEIGHT);

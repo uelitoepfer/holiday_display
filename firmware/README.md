@@ -1,18 +1,27 @@
 # Holiday Display ESP firmware
 
-ESP32 + PlatformIO firmware for the Waveshare 7.3" ACeP Spectra 6 / E6
-e-paper panel. Every 15 minutes it asks the picker server "is there a new
-image?" and only redraws the panel if so - otherwise it does nothing.
+ESP32-S3 + PlatformIO firmware for the Seeed XIAO ePaper EE04 expansion
+board (XIAO ESP32-S3 + 7.3" ACeP Spectra 6 / ED2208 color e-paper panel).
+Every 15 minutes it asks the picker server "is there a new image?" and
+only redraws the panel if so - otherwise it does nothing.
 
 ## Status
 
-Not yet tested against real hardware. The SPI protocol (command bytes,
-color codes, init sequence, busy-pin polarity) is reproduced from
-[ESPHome's `epaper_spi_spectra_e6` driver](https://github.com/esphome/esphome/tree/dev/esphome/components/epaper_spi),
-a maintained, working implementation for this exact panel - not guessed
-from a datasheet. See the comment at the top of `src/epd_spectra_e6.h` for
-the full provenance. Please verify colors/orientation once flashed, and
-open an issue (or just fix it) if something's off.
+Not yet confirmed working end to end on real hardware. The SPI protocol
+(command bytes, wire-level color codes, init sequence, busy-pin polarity)
+is cross-validated against two independent, maintained sources for the
+same ED2208/GDEP073E01 silicon:
+[ESPHome's `epaper_spi_spectra_e6` driver](https://github.com/esphome/esphome/tree/dev/esphome/components/epaper_spi)
+and [Seeed's own `Seeed_GFX2` library](https://github.com/Seeed-Studio/Seeed_GFX2)
+(`Driver_ED2208::colorGet`) - not guessed from a datasheet. See the
+comment at the top of `src/epd_spectra_e6.h` for the full provenance.
+
+We deliberately don't depend on Seeed_GFX2 itself: as of 1.0.0 it has
+internal `#include` paths that only resolve on case-insensitive
+filesystems (macOS/Windows) plus ESP-IDF API version mismatches, and
+doesn't build on Linux/PlatformIO without patching. Its source was still
+extremely useful as a second, independent confirmation of the wire
+protocol and (crucially) the actual EE04 pin mapping.
 
 One specific unknown: whether the ESP32 Arduino core's `HTTPClient` handles
 a bodyless `304 Not Modified` response cleanly. If the "check for new
@@ -21,36 +30,50 @@ image" logic seems to hang or misbehave, that's the first thing to check -
 
 ## Wiring
 
-Default pins target an ESP32-S3-DevKitC-1 board:
+This targets the Seeed XIAO ePaper EE04 board specifically - if that's
+your hardware, no wiring or pin changes are needed, the EE04's PCB fixes
+these:
 
-| Signal | GPIO |
-|--------|------|
-| CS     | 10   |
-| DC     | 9    |
-| RST    | 14   |
-| BUSY   | 13   |
-| SCK    | 12   |
-| MOSI (DIN) | 11 |
+| Signal | GPIO | XIAO alias |
+|--------|------|------------|
+| CS     | 44   | -          |
+| DC     | 10   | -          |
+| RST    | 38   | -          |
+| BUSY   | 4    | -          |
+| SCK    | 7    | D8         |
+| MOSI (DIN) | 9 | D10       |
+| Display power enable | 43 | - |
 
-Override with `-D EPD_CS_PIN=...` etc. in `platformio.ini`'s `build_flags`
-if you wired it differently. No MISO connection is needed (the panel is
-write-only from the ESP's perspective).
+That last row matters: the EE04 gates the display's power rail behind
+GPIO43, driven HIGH in `setup()` before anything else touches the panel.
+Skip that and the panel won't respond to anything, with no obvious error -
+it just looks like the SPI protocol is wrong when it isn't.
 
-**On any ESP32-S3 board, never use GPIO26-32 for anything.** On N8/N16
-modules those pins are wired internally to the flash/PSRAM chip; using one
-as a GPIO (as an earlier version of this firmware did, copying pin defaults
-from Waveshare's plain-ESP32 driver board) corrupts flash access and
-crashes the chip almost immediately - visible as a silent reboot loop
-(`rst:0x8 (TG1WDT_SYS_RST)`) with no crash log, right after boot. Also
-avoid GPIO19/20 (native USB D-/D+) and GPIO0/3/45/46 (strapping pins).
+These numbers came from decoding Seeed_GFX2's
+`Config_XIAO_ePaper_EE04_Board::pins()` (`src/board/configs/XIAO_EPaper_Board_Configs.h`)
+against the XIAO ESP32-S3's D-pin aliases in Arduino-ESP32's
+`variants/XIAO_ESP32S3/pins_arduino.h` - not measured on a scope, so
+please verify against your actual board if anything seems off.
+
+**On any ESP32-S3 board in general (not just this one), never use
+GPIO26-32 for anything.** On N8/N16 modules those pins are wired
+internally to the flash/PSRAM chip; using one as a GPIO corrupts flash
+access and crashes the chip almost immediately - visible as a silent
+reboot loop (`rst:0x8 (TG1WDT_SYS_RST)`) with no crash log, right after
+boot. This bit us once already (an earlier revision of this firmware
+copied pin defaults from Waveshare's plain-ESP32 driver board, which used
+GPIO26). Also avoid GPIO19/20 (native USB D-/D+) and GPIO0/3/45/46
+(strapping pins) on any S3 board.
 
 ## Setup
 
+Secrets (WiFi + server address) are gitignored and won't survive a fresh
+checkout - `setup_secrets.sh` regenerates `src/secrets.h` from values it
+stores once, outside the repo, in `~/.holiday_display_secrets.env`:
+
 ```bash
 cd firmware
-cp src/secrets.h.example src/secrets.h
-# edit src/secrets.h with your WiFi credentials and the picker server's
-# host/port (e.g. terminus's LAN IP and 4173)
+bash setup_secrets.sh   # prompts once, then regenerates secrets.h instantly on every re-run
 
 pio run --target upload
 pio device monitor
@@ -70,4 +93,7 @@ pio device monitor
 
 The whole panel refresh (once triggered) takes a while - the epaper
 `displayImage()` call blocks for as long as the actual e-ink redraw does
-(often 20-30s for a color panel), which is normal and expected.
+(often 20-30s for a color panel), which is normal and expected. Each
+stage (reset/init/transfer/power-on/refresh/power-off/sleep) logs to
+Serial, and a stuck BUSY wait times out after 60s with a warning naming
+which stage and GPIO to check, instead of hanging silently forever.
