@@ -6,7 +6,7 @@ import {
   OUT_PATH,
   SETTINGS_PATH,
 } from "./lib/config.js";
-import { ditherToSpectra6 } from "./lib/dither.js";
+import { ditherToSpectra6, filterByOrientation } from "./lib/dither.js";
 import {
   assertNasMounted,
   resolveFolder,
@@ -66,6 +66,14 @@ app.get("/api/image", handleErrors(async (req, res) => {
   res.send(readFileSync(abs));
 }));
 
+// Serves the current dithered display image - what the ESP should poll,
+// since OUT_PATH now lives inside this project instead of Home Assistant's
+// web-served www folder.
+app.get("/display.png", handleErrors(async (req, res) => {
+  res.setHeader("Content-Type", "image/png");
+  res.send(readFileSync(OUT_PATH));
+}));
+
 // Renders a photo through the dither pipeline with the given (possibly
 // live-tuned) params and returns the PNG bytes, without touching OUT_PATH.
 app.post("/api/preview", handleErrors(async (req, res) => {
@@ -103,15 +111,23 @@ app.get("/api/settings", handleErrors(async (req, res) => {
 // photo from a folder and renders it to OUT_PATH - runs independently of the
 // browser being open, since the ESP just polls OUT_PATH on its own schedule.
 app.post("/api/auto-shuffle", handleErrors(async (req, res) => {
-  const { enabled, folder, intervalMinutes, params } = req.body;
+  const { enabled, folder, intervalMinutes, orientation, params } = req.body;
+  const orient = ["landscape", "portrait", "either"].includes(orientation) ? orientation : "either";
+
   if (enabled) {
     const dir = resolveFolder(folder || "");
-    if (listPhotosRecursive(dir).length === 0) {
-      throw new Error(`no photos found under ${folder || "/"}`);
+    const candidates = await filterByOrientation(listPhotosRecursive(dir), orient);
+    if (candidates.length === 0) {
+      throw new Error(`no ${orient === "either" ? "" : orient + " "}photos found under ${folder || "/"}`);
     }
   }
   const settings = writeSettings({
-    autoShuffle: { enabled: !!enabled, folder: folder ?? "", intervalMinutes: Number(intervalMinutes) || 60 },
+    autoShuffle: {
+      enabled: !!enabled,
+      folder: folder ?? "",
+      intervalMinutes: Number(intervalMinutes) || 60,
+      orientation: orient,
+    },
     params: params ?? readSettings().params,
   });
   scheduleAutoShuffle(settings);
@@ -130,7 +146,7 @@ function scheduleAutoShuffle(settings) {
     try {
       const current = readSettings();
       const dir = resolveFolder(current.autoShuffle.folder || "");
-      const files = listPhotosRecursive(dir);
+      const files = await filterByOrientation(listPhotosRecursive(dir), current.autoShuffle.orientation);
       if (files.length === 0) throw new Error(`no photos found under ${current.autoShuffle.folder}`);
       const chosen = pickRandom(files);
       await ditherToSpectra6(chosen, OUT_PATH, current.params);

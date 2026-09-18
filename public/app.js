@@ -32,7 +32,7 @@ createApp({
       sigmoidalMidpoint: 50,
     });
 
-    const autoShuffle = reactive({ enabled: false, folder: "", intervalMinutes: 60 });
+    const autoShuffle = reactive({ enabled: false, folder: "", intervalMinutes: 60, orientation: "either" });
     const savingAutoShuffle = ref(false);
 
     const breadcrumbParts = computed(() => (folder.value ? folder.value.split("/") : []));
@@ -185,6 +185,7 @@ createApp({
             enabled,
             folder: folder.value,
             intervalMinutes: autoShuffle.intervalMinutes,
+            orientation: autoShuffle.orientation,
             params: { ...params },
           }),
         });
@@ -270,6 +271,11 @@ createApp({
           <span class="auto-shuffle-label">auto-shuffle this folder every</span>
           <input type="number" min="1" class="minutes-input" v-model.number="autoShuffle.intervalMinutes" />
           <span class="auto-shuffle-label">min</span>
+          <select class="orientation-select" v-model="autoShuffle.orientation">
+            <option value="either">either orientation</option>
+            <option value="landscape">landscape only</option>
+            <option value="portrait">portrait only</option>
+          </select>
           <button
             class="secondary"
             :disabled="savingAutoShuffle || !folder"
@@ -279,6 +285,7 @@ createApp({
           </button>
           <span class="auto-shuffle-status" v-if="autoShuffle.enabled">
             running on "{{ autoShuffle.folder || '/' }}" every {{ autoShuffle.intervalMinutes }} min
+            <template v-if="autoShuffle.orientation !== 'either'">({{ autoShuffle.orientation }} only)</template>
           </span>
         </div>
       </section>

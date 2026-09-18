@@ -26,9 +26,9 @@ body {
 }
 
 #app {
-  max-width: 1400px;
+  max-width: 1800px;
   margin: 0 auto;
-  padding: 24px 24px 32px;
+  padding: 20px 28px 28px;
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -205,7 +205,7 @@ header h1 {
 
 .carousel {
   width: 100%;
-  max-width: 1100px;
+  max-width: 1500px;
   flex: 1;
   display: flex;
   align-items: center;
@@ -251,7 +251,7 @@ header h1 {
 
 .carousel-footer {
   width: 100%;
-  max-width: 1100px;
+  max-width: 1500px;
   padding: 16px 0 0;
   display: flex;
   align-items: center;
@@ -282,6 +282,16 @@ header h1 {
   background: var(--panel-raised);
   color: var(--ink);
 }
+.orientation-select {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 12px;
+  background: var(--panel-raised);
+  color: var(--ink);
+}
+
 .auto-shuffle-status {
   font-size: 12px;
   color: var(--ok);
