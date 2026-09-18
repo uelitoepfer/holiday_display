@@ -1,12 +1,12 @@
 import express from "express";
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { extname } from "node:path";
 import {
   NAS_PHOTOS_ROOT,
   OUT_PATH,
   SETTINGS_PATH,
 } from "./lib/config.js";
-import { ditherToSpectra6, filterByOrientation, getOrientation } from "./lib/dither.js";
+import { ditherToSpectra6, filterByOrientation, getOrientation, pngToEpdRaw } from "./lib/dither.js";
 import {
   assertNasMounted,
   resolveFolder,
@@ -77,6 +77,23 @@ app.get("/api/image", handleErrors(async (req, res) => {
 app.get("/display.png", handleErrors(async (req, res) => {
   res.setHeader("Content-Type", "image/png");
   res.send(readFileSync(OUT_PATH));
+}));
+
+// Serves the current display image pre-packed for the panel's native 4bpp
+// format, so the ESP just streams bytes to SPI without decoding a PNG.
+// Supports conditional GET (ETag = OUT_PATH's mtime) so the ESP's periodic
+// check-for-new-image poll costs a 304 with no body when nothing changed.
+app.get("/display.raw", handleErrors(async (req, res) => {
+  const stat = statSync(OUT_PATH);
+  const etag = `"${Math.round(stat.mtimeMs)}"`;
+  if (req.headers["if-none-match"] === etag) {
+    res.status(304).end();
+    return;
+  }
+  const raw = await pngToEpdRaw(OUT_PATH);
+  res.set("ETag", etag);
+  res.set("Content-Type", "application/octet-stream");
+  res.send(raw);
 }));
 
 // Landscape/portrait for a single photo, for the marker shown in the tuning drawer.
