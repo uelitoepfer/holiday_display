@@ -1,0 +1,13 @@
+[Unit]
+Description=Holiday Display Picker
+After=network.target
+
+[Service]
+User=ueli
+WorkingDirectory=/home/ueli/holiday_display
+ExecStart=/usr/bin/node server.js
+Restart=always
+Environment=PORT=4173
+
+[Install]
+WantedBy=multi-user.target
