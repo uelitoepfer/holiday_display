@@ -99,10 +99,54 @@ app.get("/api/settings", handleErrors(async (req, res) => {
   res.json(readSettings());
 }));
 
+// Enables/disables a server-side timer that periodically picks a new random
+// photo from a folder and renders it to OUT_PATH - runs independently of the
+// browser being open, since the ESP just polls OUT_PATH on its own schedule.
+app.post("/api/auto-shuffle", handleErrors(async (req, res) => {
+  const { enabled, folder, intervalMinutes, params } = req.body;
+  if (enabled) {
+    const dir = resolveFolder(folder || "");
+    if (listPhotosRecursive(dir).length === 0) {
+      throw new Error(`no photos found under ${folder || "/"}`);
+    }
+  }
+  const settings = writeSettings({
+    autoShuffle: { enabled: !!enabled, folder: folder ?? "", intervalMinutes: Number(intervalMinutes) || 60 },
+    params: params ?? readSettings().params,
+  });
+  scheduleAutoShuffle(settings);
+  res.json({ ok: true, settings });
+}));
+
+let autoShuffleTimer = null;
+
+function scheduleAutoShuffle(settings) {
+  clearInterval(autoShuffleTimer);
+  autoShuffleTimer = null;
+  if (!settings.autoShuffle?.enabled) return;
+
+  const ms = Math.max(1, settings.autoShuffle.intervalMinutes) * 60_000;
+  autoShuffleTimer = setInterval(async () => {
+    try {
+      const current = readSettings();
+      const dir = resolveFolder(current.autoShuffle.folder || "");
+      const files = listPhotosRecursive(dir);
+      if (files.length === 0) throw new Error(`no photos found under ${current.autoShuffle.folder}`);
+      const chosen = pickRandom(files);
+      await ditherToSpectra6(chosen, OUT_PATH, current.params);
+      writeSettings({ photo: toRelPath(chosen), folder: current.autoShuffle.folder });
+      console.log(`[ok] auto-shuffle rendered ${toRelPath(chosen)}`);
+    } catch (err) {
+      console.error("[warn] auto-shuffle tick failed:", err.message);
+    }
+  }, ms);
+}
+
 const PORT = process.env.PORT || 4173;
 app.listen(PORT, () => {
   console.log(`[ok] holiday display picker listening on http://0.0.0.0:${PORT}`);
   console.log(`[info] NAS root: ${NAS_PHOTOS_ROOT}`);
   console.log(`[info] output:   ${OUT_PATH}`);
   console.log(`[info] settings: ${SETTINGS_PATH}`);
+  scheduleAutoShuffle(readSettings());
 });

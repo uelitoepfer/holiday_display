@@ -14,8 +14,9 @@ createApp({
     const folders = ref([]);
     const photos = ref([]);
     const photoCount = ref(0);
+    const carouselIndex = ref(0);
 
-    const selectedPhoto = ref(""); // rel path
+    const selectedPhoto = ref(""); // rel path, once sent to the tuning drawer
     const previewUrl = ref("");
     const previewLoading = ref(false);
     const applying = ref(false);
@@ -30,7 +31,11 @@ createApp({
       sigmoidalMidpoint: 50,
     });
 
+    const autoShuffle = reactive({ enabled: false, folder: "", intervalMinutes: 60 });
+    const savingAutoShuffle = ref(false);
+
     const breadcrumbParts = computed(() => (folder.value ? folder.value.split("/") : []));
+    const currentPhoto = computed(() => photos.value[carouselIndex.value] || null);
 
     async function loadFolder(rel) {
       errorMessage.value = "";
@@ -44,6 +49,7 @@ createApp({
       folders.value = data.folders;
       photos.value = data.photos;
       photoCount.value = data.photoCount;
+      carouselIndex.value = 0;
     }
 
     function openFolder(name) {
@@ -59,11 +65,25 @@ createApp({
       loadFolder("");
     }
 
+    function prevPhoto() {
+      if (!photos.value.length) return;
+      carouselIndex.value = (carouselIndex.value - 1 + photos.value.length) % photos.value.length;
+    }
+
+    function nextPhoto() {
+      if (!photos.value.length) return;
+      carouselIndex.value = (carouselIndex.value + 1) % photos.value.length;
+    }
+
     async function selectPhoto(rel) {
       selectedPhoto.value = rel;
       applyMessage.value = "";
       errorMessage.value = "";
       await refreshPreview();
+    }
+
+    function tuneCurrentPhoto() {
+      if (currentPhoto.value) selectPhoto(currentPhoto.value.rel);
     }
 
     async function pickRandomFromFolder() {
@@ -114,6 +134,12 @@ createApp({
       });
     }
 
+    function closeDrawer() {
+      selectedPhoto.value = "";
+      if (previewUrl.value) URL.revokeObjectURL(previewUrl.value);
+      previewUrl.value = "";
+    }
+
     async function applyToDisplay() {
       if (!selectedPhoto.value) return;
       applying.value = true;
@@ -135,24 +161,47 @@ createApp({
       }
     }
 
+    async function saveAutoShuffle(enabled) {
+      savingAutoShuffle.value = true;
+      errorMessage.value = "";
+      try {
+        const res = await fetch("/api/auto-shuffle", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            enabled,
+            folder: folder.value,
+            intervalMinutes: autoShuffle.intervalMinutes,
+            params: { ...params },
+          }),
+        });
+        if (!res.ok) {
+          errorMessage.value = (await res.json()).error || "could not update auto-shuffle";
+          return;
+        }
+        const data = await res.json();
+        Object.assign(autoShuffle, data.settings.autoShuffle);
+      } finally {
+        savingAutoShuffle.value = false;
+      }
+    }
+
     onMounted(async () => {
       const settings = await (await fetch("/api/settings")).json();
       Object.assign(params, settings.params);
+      Object.assign(autoShuffle, settings.autoShuffle);
       await loadFolder(settings.folder || "");
-      if (settings.photo) {
-        selectedPhoto.value = settings.photo;
-        await refreshPreview();
-      }
     });
 
     return {
       folder, folders, photos, photoCount, breadcrumbParts,
+      carouselIndex, currentPhoto, prevPhoto, nextPhoto, tuneCurrentPhoto,
       selectedPhoto, previewUrl, previewLoading,
       applying, applyMessage, errorMessage,
-      params,
+      params, autoShuffle, savingAutoShuffle,
       openFolder, goToBreadcrumb, goRoot,
       selectPhoto, pickRandomFromFolder,
-      resetParams, applyToDisplay,
+      resetParams, applyToDisplay, closeDrawer, saveAutoShuffle,
     };
   },
   template: `
@@ -169,14 +218,14 @@ createApp({
         <span class="swatch" style="--c:#0000FF"></span>
         <span class="swatch" style="--c:#00A651"></span>
       </div>
-      <div class="status" v-if="selectedPhoto">{{ selectedPhoto }}</div>
     </header>
     <div class="layout">
       <aside class="sidebar">
-        <div class="breadcrumb">
-          <button @click="goRoot">root</button>
+        <div class="folder-nav">
+          <button class="home-btn" @click="goRoot" title="all folders">⌂</button>
           <template v-for="(part, i) in breadcrumbParts" :key="i">
-            / <button @click="goToBreadcrumb(i)">{{ part }}</button>
+            <span class="crumb-sep">/</span>
+            <button class="crumb-btn" @click="goToBreadcrumb(i)">{{ part }}</button>
           </template>
         </div>
         <div class="folder-row" v-for="f in folders" :key="f" @click="openFolder(f)">
@@ -187,24 +236,47 @@ createApp({
 
       <section class="main">
         <div class="grid-toolbar">
-          <span class="path">{{ folder || '/' }} · {{ photoCount }} photo(s) here</span>
-          <button class="secondary" v-if="photoCount" @click="pickRandomFromFolder">shuffle this folder</button>
+          <span class="path">{{ photoCount }} photo(s) here</span>
+          <button class="secondary" v-if="photoCount" @click="pickRandomFromFolder">shuffle now</button>
         </div>
-        <div class="grid" v-if="photos.length">
-          <div
-            v-for="p in photos"
-            :key="p.rel"
-            class="thumb"
-            :class="{ selected: selectedPhoto === p.rel }"
-            @click="selectPhoto(p.rel)"
-          >
-            <img :src="'/api/image?path=' + encodeURIComponent(p.rel)" loading="lazy" :alt="p.name" />
+        <div class="error-note main-error" v-if="errorMessage">{{ errorMessage }}</div>
+
+        <div class="carousel" v-if="currentPhoto">
+          <button class="carousel-arrow" @click="prevPhoto" :disabled="photos.length < 2">‹</button>
+          <div class="carousel-frame">
+            <img :src="'/api/image?path=' + encodeURIComponent(currentPhoto.rel)" :alt="currentPhoto.name" />
           </div>
+          <button class="carousel-arrow" @click="nextPhoto" :disabled="photos.length < 2">›</button>
         </div>
         <div v-else class="empty-state">no photos in this folder - drill into a subfolder</div>
+
+        <div class="carousel-footer" v-if="currentPhoto">
+          <span class="carousel-count">{{ carouselIndex + 1 }} / {{ photos.length }} · {{ currentPhoto.name }}</span>
+          <button class="primary" @click="tuneCurrentPhoto">Tune &amp; select</button>
+        </div>
+
+        <div class="auto-shuffle-bar">
+          <span class="auto-shuffle-label">auto-shuffle this folder every</span>
+          <input type="number" min="1" class="minutes-input" v-model.number="autoShuffle.intervalMinutes" />
+          <span class="auto-shuffle-label">min</span>
+          <button
+            class="secondary"
+            :disabled="savingAutoShuffle || !folder"
+            @click="saveAutoShuffle(!autoShuffle.enabled || autoShuffle.folder !== folder)"
+          >
+            {{ autoShuffle.enabled && autoShuffle.folder === folder ? 'stop' : 'start' }}
+          </button>
+          <span class="auto-shuffle-status" v-if="autoShuffle.enabled">
+            running on "{{ autoShuffle.folder || '/' }}" every {{ autoShuffle.intervalMinutes }} min
+          </span>
+        </div>
       </section>
 
       <aside class="drawer" v-if="selectedPhoto">
+        <div class="drawer-header">
+          <span class="eyebrow">tuning</span>
+          <button class="close-btn" @click="closeDrawer">×</button>
+        </div>
         <div class="preview-frame">
           <img v-if="previewUrl" :src="previewUrl" alt="dithered preview" />
           <div class="spinner" v-if="previewLoading">rendering…</div>
