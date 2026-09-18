@@ -227,13 +227,20 @@ createApp({
       </div>
     </header>
     <div class="layout">
+      <aside class="sidebar">
+        <div class="folder-row" :class="{ active: folder === '' }" @click="loadFolder('')">/ (top level)</div>
+        <div
+          class="folder-row"
+          v-for="f in allFolders"
+          :key="f"
+          :class="{ active: folder === f }"
+          @click="loadFolder(f)"
+        >{{ f }}</div>
+      </aside>
+
       <section class="main">
         <div class="grid-toolbar">
-          <select class="folder-select" v-model="folder" @change="loadFolder(folder)">
-            <option value="">/ (top level)</option>
-            <option v-for="f in allFolders" :key="f" :value="f">{{ f }}</option>
-          </select>
-          <span class="path">{{ photoCount }} photo(s) here</span>
+          <span class="path">{{ folder || '/' }} · {{ photoCount }} photo(s) here</span>
           <button class="secondary" v-if="photoCount" @click="pickRandomFromFolder">shuffle now</button>
         </div>
         <div class="error-note main-error" v-if="errorMessage">{{ errorMessage }}</div>
@@ -248,7 +255,7 @@ createApp({
             <img :src="'/api/image?path=' + encodeURIComponent(p.rel)" loading="lazy" :alt="p.name" />
           </div>
         </div>
-        <div v-else class="empty-state">no photos directly in this folder - pick another from the dropdown</div>
+        <div v-else class="empty-state">no photos directly in this folder - pick another from the list</div>
 
         <div class="auto-shuffle-bar">
           <span class="auto-shuffle-label">auto-shuffle this folder every</span>
