@@ -15,6 +15,7 @@ createApp({
     const photos = ref([]);
     const photoCount = ref(0);
     const carouselIndex = ref(0);
+    const showCarousel = ref(false);
 
     const selectedPhoto = ref(""); // rel path, once sent to the tuning drawer
     const previewUrl = ref("");
@@ -50,6 +51,7 @@ createApp({
       photos.value = data.photos;
       photoCount.value = data.photoCount;
       carouselIndex.value = 0;
+      showCarousel.value = false;
     }
 
     function openFolder(name) {
@@ -63,6 +65,15 @@ createApp({
 
     function goRoot() {
       loadFolder("");
+    }
+
+    function openCarousel(index) {
+      carouselIndex.value = index;
+      showCarousel.value = true;
+    }
+
+    function closeCarousel() {
+      showCarousel.value = false;
     }
 
     function prevPhoto() {
@@ -83,7 +94,9 @@ createApp({
     }
 
     function tuneCurrentPhoto() {
-      if (currentPhoto.value) selectPhoto(currentPhoto.value.rel);
+      if (!currentPhoto.value) return;
+      showCarousel.value = false;
+      selectPhoto(currentPhoto.value.rel);
     }
 
     async function pickRandomFromFolder() {
@@ -195,7 +208,7 @@ createApp({
 
     return {
       folder, folders, photos, photoCount, breadcrumbParts,
-      carouselIndex, currentPhoto, prevPhoto, nextPhoto, tuneCurrentPhoto,
+      carouselIndex, currentPhoto, showCarousel, openCarousel, closeCarousel, prevPhoto, nextPhoto, tuneCurrentPhoto,
       selectedPhoto, previewUrl, previewLoading,
       applying, applyMessage, errorMessage,
       params, autoShuffle, savingAutoShuffle,
@@ -241,19 +254,17 @@ createApp({
         </div>
         <div class="error-note main-error" v-if="errorMessage">{{ errorMessage }}</div>
 
-        <div class="carousel" v-if="currentPhoto">
-          <button class="carousel-arrow" @click="prevPhoto" :disabled="photos.length < 2">‹</button>
-          <div class="carousel-frame">
-            <img :src="'/api/image?path=' + encodeURIComponent(currentPhoto.rel)" :alt="currentPhoto.name" />
+        <div class="grid" v-if="photos.length">
+          <div
+            v-for="(p, i) in photos"
+            :key="p.rel"
+            class="thumb"
+            @click="openCarousel(i)"
+          >
+            <img :src="'/api/image?path=' + encodeURIComponent(p.rel)" loading="lazy" :alt="p.name" />
           </div>
-          <button class="carousel-arrow" @click="nextPhoto" :disabled="photos.length < 2">›</button>
         </div>
         <div v-else class="empty-state">no photos in this folder - drill into a subfolder</div>
-
-        <div class="carousel-footer" v-if="currentPhoto">
-          <span class="carousel-count">{{ carouselIndex + 1 }} / {{ photos.length }} · {{ currentPhoto.name }}</span>
-          <button class="primary" @click="tuneCurrentPhoto">Tune &amp; select</button>
-        </div>
 
         <div class="auto-shuffle-bar">
           <span class="auto-shuffle-label">auto-shuffle this folder every</span>
@@ -312,6 +323,21 @@ createApp({
         <div class="applied-note" v-if="applyMessage">{{ applyMessage }}</div>
         <div class="error-note" v-if="errorMessage">{{ errorMessage }}</div>
       </aside>
+    </div>
+
+    <div class="carousel-overlay" v-if="showCarousel && currentPhoto" @click.self="closeCarousel">
+      <button class="close-btn overlay-close" @click="closeCarousel">×</button>
+      <div class="carousel">
+        <button class="carousel-arrow" @click="prevPhoto" :disabled="photos.length < 2">‹</button>
+        <div class="carousel-frame">
+          <img :src="'/api/image?path=' + encodeURIComponent(currentPhoto.rel)" :alt="currentPhoto.name" />
+        </div>
+        <button class="carousel-arrow" @click="nextPhoto" :disabled="photos.length < 2">›</button>
+      </div>
+      <div class="carousel-footer">
+        <span class="carousel-count">{{ carouselIndex + 1 }} / {{ photos.length }} · {{ currentPhoto.name }}</span>
+        <button class="primary" @click="tuneCurrentPhoto">Tune &amp; select</button>
+      </div>
     </div>
   `,
 }).mount("#app");
