@@ -35,8 +35,9 @@
 #define PANEL_HEIGHT 480
 #define FRAMEBUFFER_SIZE (PANEL_WIDTH * PANEL_HEIGHT / 2)  // 4bpp, 2px/byte
 
-// "Check every 15 min, load if new, otherwise do nothing."
-static const uint32_t CHECK_INTERVAL_MS = 15UL * 60UL * 1000UL;
+// Tightened for testing - bump back to 15 min (15UL * 60UL * 1000UL) once
+// you've confirmed everything works end to end.
+static const uint32_t CHECK_INTERVAL_MS = 10UL * 1000UL;
 
 EpdSpectraE6 epd;
 String lastEtag = "";
