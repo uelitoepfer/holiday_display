@@ -67,6 +67,12 @@ header h1 {
   margin-left: auto;
 }
 
+.sleep-interval-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .battery-stat {
   display: flex;
   align-items: center;

@@ -51,6 +51,30 @@ createApp({
       return `${hours} h ago`;
     });
 
+    const sleepIntervalMinutes = ref(15);
+    const savedSleepInterval = ref(15);
+    const savingSleepInterval = ref(false);
+    async function saveSleepInterval() {
+      savingSleepInterval.value = true;
+      errorMessage.value = "";
+      try {
+        const res = await fetch("/api/sleep-interval", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ minutes: sleepIntervalMinutes.value }),
+        });
+        if (!res.ok) {
+          errorMessage.value = (await res.json()).error || "could not update sleep interval";
+          return;
+        }
+        const data = await res.json();
+        sleepIntervalMinutes.value = data.checkIntervalMinutes;
+        savedSleepInterval.value = data.checkIntervalMinutes;
+      } finally {
+        savingSleepInterval.value = false;
+      }
+    }
+
     const currentPhoto = computed(() => photos.value[carouselIndex.value] || null);
 
     // Paginate the grid so mobile doesn't turn into an endless scroll on
@@ -295,6 +319,8 @@ createApp({
       Object.assign(params, settings.params);
       Object.assign(autoShuffle, settings.autoShuffle);
       Object.assign(battery, settings.battery);
+      sleepIntervalMinutes.value = settings.checkIntervalMinutes;
+      savedSleepInterval.value = settings.checkIntervalMinutes;
       await loadFolderList();
       await loadFolder(settings.folder || "");
     });
@@ -307,6 +333,7 @@ createApp({
       applying, applyMessage, errorMessage,
       params, autoShuffle, savingAutoShuffle,
       battery, batteryAgeLabel,
+      sleepIntervalMinutes, savedSleepInterval, savingSleepInterval, saveSleepInterval,
       loadFolder,
       selectPhoto, pickRandomFromFolder,
       resetParams, applyToDisplay, closeDrawer, saveAutoShuffle,
@@ -319,6 +346,18 @@ createApp({
         <h1>Holiday Display</h1>
       </div>
       <div class="header-right">
+        <div class="sleep-interval-control" title="How often the display wakes up to check for a new image - it picks this up the next time it wakes, not immediately">
+          <span class="auto-shuffle-label">check every</span>
+          <input type="number" min="1" class="minutes-input" v-model.number="sleepIntervalMinutes" />
+          <span class="auto-shuffle-label">min</span>
+          <button
+            class="secondary"
+            :disabled="savingSleepInterval || sleepIntervalMinutes === savedSleepInterval"
+            @click="saveSleepInterval"
+          >
+            {{ savingSleepInterval ? 'saving…' : 'save' }}
+          </button>
+        </div>
         <div class="battery-stat" v-if="battery.percent !== null" :title="battery.voltageMv + ' mV, updated ' + batteryAgeLabel">
           <span class="battery-icon" :class="{ low: battery.percent <= 20 }">🔋</span>
           {{ battery.percent }}% <span class="battery-age" v-if="batteryAgeLabel">· {{ batteryAgeLabel }}</span>

@@ -151,6 +151,22 @@ app.post("/api/battery", handleErrors(async (req, res) => {
   res.json({ ok: true, battery: settings.battery });
 }));
 
+// Plain-text minutes, not JSON - the ESP fetches this on every wake (right
+// before deciding how long to sleep next) and a bare number is the least
+// code to parse on-device. The web UI uses /api/settings for the same value.
+app.get("/api/sleep-interval", handleErrors(async (req, res) => {
+  res.type("text/plain").send(String(readSettings().checkIntervalMinutes));
+}));
+
+app.post("/api/sleep-interval", handleErrors(async (req, res) => {
+  const minutes = Number(req.body.minutes);
+  if (!Number.isFinite(minutes) || minutes < 1) {
+    throw new Error("minutes must be a number >= 1");
+  }
+  const settings = writeSettings({ checkIntervalMinutes: Math.round(minutes) });
+  res.json({ ok: true, checkIntervalMinutes: settings.checkIntervalMinutes });
+}));
+
 // Enables/disables a server-side timer that periodically picks a new random
 // photo from a folder and renders it to OUT_PATH - runs independently of the
 // browser being open, since the ESP just polls OUT_PATH on its own schedule.

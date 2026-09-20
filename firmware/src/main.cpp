@@ -46,7 +46,12 @@
 #define PANEL_HEIGHT 480
 #define FRAMEBUFFER_SIZE (PANEL_WIDTH * PANEL_HEIGHT / 2)  // 4bpp, 2px/byte
 
-static const uint32_t CHECK_INTERVAL_MS = 15UL * 60UL * 1000UL;
+// Used on first boot and as a fallback if the server can't be reached for
+// the real value - the server-configured interval otherwise wins (see
+// fetchSleepIntervalMs()).
+static const uint32_t DEFAULT_CHECK_INTERVAL_MS = 15UL * 60UL * 1000UL;
+static const uint32_t MIN_CHECK_INTERVAL_MS = 60UL * 1000UL;         // 1 min
+static const uint32_t MAX_CHECK_INTERVAL_MS = 24UL * 60UL * 60UL * 1000UL;  // 24 h
 
 // The XIAO ESP32-S3's onboard battery-sense divider (BAT+ -> 1:2 divider ->
 // A0/GPIO1) - a standard feature of this board line, not something the EE04
@@ -169,7 +174,16 @@ bool checkAndUpdateDisplay() {
 // Best-effort: failing to reach the server shouldn't block going back to
 // sleep, so errors here are just logged.
 void reportBattery() {
-  uint32_t milliVolts = analogReadMilliVolts(BATTERY_ADC_PIN) * 2;  // divider is 1:2
+  // analogReadMilliVolts() relies on this chip's ADC calibration eFuse data,
+  // which isn't set on this board - it silently falls back to a "Default
+  // Vref: 0" characterization and reports 0mV no matter the real voltage
+  // (confirmed via Serial log: "ADC1: Characterized using Default Vref: 0").
+  // Read the raw counts and scale by hand instead; without factory
+  // calibration this is only accurate to within about +-5%.
+  analogReadResolution(12);
+  analogSetPinAttenuation(BATTERY_ADC_PIN, ADC_11db);
+  uint32_t raw = analogRead(BATTERY_ADC_PIN);
+  uint32_t milliVolts = (raw * 3300UL / 4095UL) * 2;  // 11dB range ~3300mV, divider is 1:2
   int percent = constrain(
       map(milliVolts, BATTERY_EMPTY_MV, BATTERY_FULL_MV, 0, 100), 0, 100);
   Serial.printf("Battery: %u mV (%d%%)\n", milliVolts, percent);
@@ -187,6 +201,36 @@ void reportBattery() {
   http.end();
 }
 
+// Picks up whatever sleep interval is currently set on the server, so a
+// change made in the web UI takes effect the next time this device wakes up
+// and checks in - there's no way to push it to an already-sleeping ESP.
+// Falls back to DEFAULT_CHECK_INTERVAL_MS if the server is unreachable or
+// returns something out of sane bounds.
+uint32_t fetchSleepIntervalMs() {
+  HTTPClient http;
+  String url = String("http://") + SERVER_HOST + ":" + SERVER_PORT + "/api/sleep-interval";
+  if (!http.begin(url)) {
+    Serial.println("Sleep interval fetch: HTTP begin failed");
+    return DEFAULT_CHECK_INTERVAL_MS;
+  }
+  int status = http.GET();
+  if (status != HTTP_CODE_OK) {
+    Serial.printf("Sleep interval fetch -> %d, using default\n", status);
+    http.end();
+    return DEFAULT_CHECK_INTERVAL_MS;
+  }
+  uint32_t minutes = http.getString().toInt();
+  http.end();
+
+  uint32_t ms = minutes * 60UL * 1000UL;
+  if (minutes == 0 || ms < MIN_CHECK_INTERVAL_MS || ms > MAX_CHECK_INTERVAL_MS) {
+    Serial.printf("Sleep interval %u min out of bounds, using default\n", minutes);
+    return DEFAULT_CHECK_INTERVAL_MS;
+  }
+  Serial.printf("Sleep interval from server: %u min\n", minutes);
+  return ms;
+}
+
 void setup() {
   Serial.begin(115200);
   delay(200);
@@ -202,14 +246,15 @@ void setup() {
   connectWiFi();
   checkAndUpdateDisplay();
   reportBattery();
+  uint32_t sleepMs = fetchSleepIntervalMs();
 
   // Deep sleep instead of a delay() loop so the radio and CPU actually power
   // down between checks - a busy-wait loop draws close to full current the
-  // whole 15 minutes, which would drain a battery in hours, not weeks.
+  // whole interval, which would drain a battery in hours, not weeks.
   WiFi.disconnect(true);
-  Serial.printf("Sleeping for %lu ms\n", (unsigned long) CHECK_INTERVAL_MS);
+  Serial.printf("Sleeping for %lu ms\n", (unsigned long) sleepMs);
   Serial.flush();
-  esp_sleep_enable_timer_wakeup((uint64_t) CHECK_INTERVAL_MS * 1000ULL);
+  esp_sleep_enable_timer_wakeup((uint64_t) sleepMs * 1000ULL);
   esp_deep_sleep_start();
 }
 
