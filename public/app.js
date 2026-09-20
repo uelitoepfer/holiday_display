@@ -38,6 +38,23 @@ createApp({
 
     const currentPhoto = computed(() => photos.value[carouselIndex.value] || null);
 
+    // Paginate the grid so mobile doesn't turn into an endless scroll on
+    // large folders. The carousel overlay still navigates the full,
+    // unpaginated photos list (prev/next wrap across all of them).
+    const PHOTOS_PER_PAGE = 24;
+    const photoPage = ref(0);
+    const totalPages = computed(() => Math.max(1, Math.ceil(photos.value.length / PHOTOS_PER_PAGE)));
+    const pagedPhotos = computed(() => {
+      const start = photoPage.value * PHOTOS_PER_PAGE;
+      return photos.value.slice(start, start + PHOTOS_PER_PAGE).map((p, i) => ({
+        ...p,
+        globalIndex: start + i,
+      }));
+    });
+    function goToPage(p) {
+      photoPage.value = Math.max(0, Math.min(p, totalPages.value - 1));
+    }
+
     // Which folders are expanded in the sidebar tree. Empty by default -
     // only top-level folders show until you click one open.
     const expandedPaths = reactive(new Set());
@@ -113,6 +130,7 @@ createApp({
       photos.value = data.photos;
       photoCount.value = data.photoCount;
       carouselIndex.value = 0;
+      photoPage.value = 0;
       showCarousel.value = false;
     }
 
@@ -267,6 +285,7 @@ createApp({
 
     return {
       folder, visibleFolderTree, expandedPaths, selectFolder, collapseAllFolders, photos, photoCount,
+      pagedPhotos, photoPage, totalPages, goToPage,
       carouselIndex, currentPhoto, showCarousel, openCarousel, closeCarousel, prevPhoto, nextPhoto, tuneCurrentPhoto,
       selectedPhoto, photoOrientation, previewUrl, previewLoading,
       applying, applyMessage, errorMessage,
@@ -321,15 +340,21 @@ createApp({
 
         <div class="grid" v-if="photos.length">
           <div
-            v-for="(p, i) in photos"
+            v-for="p in pagedPhotos"
             :key="p.rel"
             class="thumb"
-            @click="openCarousel(i)"
+            @click="openCarousel(p.globalIndex)"
           >
             <img :src="'/api/image?path=' + encodeURIComponent(p.rel)" loading="lazy" :alt="p.name" />
           </div>
         </div>
         <div v-else class="empty-state">no photos directly in this folder - pick another from the list</div>
+
+        <div class="pagination-bar" v-if="photos.length && totalPages > 1">
+          <button class="page-arrow" @click="goToPage(photoPage - 1)" :disabled="photoPage === 0">‹</button>
+          <span class="page-status">page {{ photoPage + 1 }} / {{ totalPages }}</span>
+          <button class="page-arrow" @click="goToPage(photoPage + 1)" :disabled="photoPage >= totalPages - 1">›</button>
+        </div>
 
         <div class="auto-shuffle-bar">
           <span class="auto-shuffle-label">auto-shuffle this folder every</span>

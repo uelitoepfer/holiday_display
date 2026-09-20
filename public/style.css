@@ -300,6 +300,31 @@ header h1 {
   font-size: 13px;
 }
 
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 10px 18px;
+  border-top: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.page-status { font-size: 12px; color: var(--muted); min-width: 90px; text-align: center; }
+.page-arrow {
+  background: var(--panel-raised);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-family: inherit;
+}
+.page-arrow:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.page-arrow:disabled { opacity: 0.3; cursor: not-allowed; }
+
 .drawer {
   width: 370px;
   flex-shrink: 0;
