@@ -36,6 +36,21 @@ createApp({
     const autoShuffle = reactive({ enabled: false, folder: "", intervalMinutes: 60, orientation: "either" });
     const savingAutoShuffle = ref(false);
 
+    const battery = reactive({ voltageMv: null, percent: null, updatedAt: null });
+    // Date.now() isn't reactive on its own, so this tick forces the "N min
+    // ago" label to keep advancing without needing a fresh /api/settings call.
+    const clockTick = ref(0);
+    setInterval(() => clockTick.value++, 60_000);
+    const batteryAgeLabel = computed(() => {
+      clockTick.value;
+      if (!battery.updatedAt) return "";
+      const minutes = Math.round((Date.now() - new Date(battery.updatedAt).getTime()) / 60000);
+      if (minutes < 1) return "just now";
+      if (minutes < 60) return `${minutes} min ago`;
+      const hours = Math.round(minutes / 60);
+      return `${hours} h ago`;
+    });
+
     const currentPhoto = computed(() => photos.value[carouselIndex.value] || null);
 
     // Paginate the grid so mobile doesn't turn into an endless scroll on
@@ -279,6 +294,7 @@ createApp({
       const settings = await (await fetch("/api/settings")).json();
       Object.assign(params, settings.params);
       Object.assign(autoShuffle, settings.autoShuffle);
+      Object.assign(battery, settings.battery);
       await loadFolderList();
       await loadFolder(settings.folder || "");
     });
@@ -290,6 +306,7 @@ createApp({
       selectedPhoto, photoOrientation, previewUrl, previewLoading,
       applying, applyMessage, errorMessage,
       params, autoShuffle, savingAutoShuffle,
+      battery, batteryAgeLabel,
       loadFolder,
       selectPhoto, pickRandomFromFolder,
       resetParams, applyToDisplay, closeDrawer, saveAutoShuffle,
@@ -301,13 +318,19 @@ createApp({
         <span class="eyebrow">e-ink print picker</span>
         <h1>Holiday Display</h1>
       </div>
-      <div class="palette-strip" title="Spectra 6 panel palette">
-        <span class="swatch" style="--c:#000000"></span>
-        <span class="swatch" style="--c:#FFFFFF"></span>
-        <span class="swatch" style="--c:#FF0000"></span>
-        <span class="swatch" style="--c:#FFF200"></span>
-        <span class="swatch" style="--c:#0000FF"></span>
-        <span class="swatch" style="--c:#00A651"></span>
+      <div class="header-right">
+        <div class="battery-stat" v-if="battery.percent !== null" :title="battery.voltageMv + ' mV, updated ' + batteryAgeLabel">
+          <span class="battery-icon" :class="{ low: battery.percent <= 20 }">🔋</span>
+          {{ battery.percent }}% <span class="battery-age" v-if="batteryAgeLabel">· {{ batteryAgeLabel }}</span>
+        </div>
+        <div class="palette-strip" title="Spectra 6 panel palette">
+          <span class="swatch" style="--c:#000000"></span>
+          <span class="swatch" style="--c:#FFFFFF"></span>
+          <span class="swatch" style="--c:#FF0000"></span>
+          <span class="swatch" style="--c:#FFF200"></span>
+          <span class="swatch" style="--c:#0000FF"></span>
+          <span class="swatch" style="--c:#00A651"></span>
+        </div>
       </div>
     </header>
     <div class="layout">

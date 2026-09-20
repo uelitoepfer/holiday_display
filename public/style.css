@@ -60,10 +60,27 @@ header h1 {
   letter-spacing: -0.01em;
 }
 
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-left: auto;
+}
+
+.battery-stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.battery-icon { font-size: 14px; }
+.battery-icon.low { filter: grayscale(1) sepia(1) hue-rotate(-50deg) saturate(4); }
+.battery-age { color: var(--muted); }
+
 .palette-strip {
   display: flex;
   gap: 4px;
-  margin-left: auto;
 }
 .swatch {
   width: 14px;

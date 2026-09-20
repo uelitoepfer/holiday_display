@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <esp_sleep.h>
 
 #include "secrets.h"
 #include "epd_spectra_e6.h"
@@ -45,13 +46,24 @@
 #define PANEL_HEIGHT 480
 #define FRAMEBUFFER_SIZE (PANEL_WIDTH * PANEL_HEIGHT / 2)  // 4bpp, 2px/byte
 
-// Tightened for testing - bump back to 15 min (15UL * 60UL * 1000UL) once
-// you've confirmed everything works end to end.
-static const uint32_t CHECK_INTERVAL_MS = 10UL * 1000UL;
+static const uint32_t CHECK_INTERVAL_MS = 15UL * 60UL * 1000UL;
+
+// The XIAO ESP32-S3's onboard battery-sense divider (BAT+ -> 1:2 divider ->
+// A0/GPIO1) - a standard feature of this board line, not something the EE04
+// expansion board adds or documents itself, so verify against a multimeter
+// if reported percentages look off.
+#ifndef BATTERY_ADC_PIN
+#define BATTERY_ADC_PIN A0
+#endif
+static const uint32_t BATTERY_EMPTY_MV = 3300;  // ~0% for a single-cell LiPo
+static const uint32_t BATTERY_FULL_MV = 4200;   // ~100% for a single-cell LiPo
 
 EpdSpectraE6 epd;
-String lastEtag = "";
-uint32_t lastCheckMs = 0;
+
+// Deep sleep resets the chip like a reboot, so ordinary globals don't
+// survive between checks - RTC memory does. Keeping the ETag here means the
+// conditional GET still works (and skips redrawing) across sleep cycles.
+RTC_DATA_ATTR char lastEtag[64] = "";
 
 void connectWiFi() {
   WiFi.mode(WIFI_STA);
@@ -82,7 +94,7 @@ bool checkAndUpdateDisplay() {
   const char *headerKeys[] = {"ETag"};
   http.collectHeaders(headerKeys, 1);
 
-  if (lastEtag.length() > 0) {
+  if (lastEtag[0] != '\0') {
     http.addHeader("If-None-Match", lastEtag);
   }
 
@@ -146,9 +158,33 @@ bool checkAndUpdateDisplay() {
   epd.displayImage(buffer, FRAMEBUFFER_SIZE);
   free(buffer);
 
-  lastEtag = newEtag;
+  strncpy(lastEtag, newEtag.c_str(), sizeof(lastEtag) - 1);
+  lastEtag[sizeof(lastEtag) - 1] = '\0';
   Serial.println("Display updated.");
   return true;
+}
+
+// Reads the battery voltage off the onboard divider and reports it to the
+// picker server so the web UI can show roughly how much charge is left.
+// Best-effort: failing to reach the server shouldn't block going back to
+// sleep, so errors here are just logged.
+void reportBattery() {
+  uint32_t milliVolts = analogReadMilliVolts(BATTERY_ADC_PIN) * 2;  // divider is 1:2
+  int percent = constrain(
+      map(milliVolts, BATTERY_EMPTY_MV, BATTERY_FULL_MV, 0, 100), 0, 100);
+  Serial.printf("Battery: %u mV (%d%%)\n", milliVolts, percent);
+
+  HTTPClient http;
+  String url = String("http://") + SERVER_HOST + ":" + SERVER_PORT + "/api/battery";
+  if (!http.begin(url)) {
+    Serial.println("Battery report: HTTP begin failed");
+    return;
+  }
+  http.addHeader("Content-Type", "application/json");
+  String body = String("{\"voltageMv\":") + milliVolts + ",\"percent\":" + percent + "}";
+  int status = http.POST(body);
+  Serial.printf("POST %s -> %d\n", url.c_str(), status);
+  http.end();
 }
 
 void setup() {
@@ -164,22 +200,20 @@ void setup() {
             PANEL_WIDTH, PANEL_HEIGHT);
 
   connectWiFi();
+  checkAndUpdateDisplay();
+  reportBattery();
 
-  // Check once immediately on boot, then every CHECK_INTERVAL_MS.
-  lastCheckMs = millis() - CHECK_INTERVAL_MS;
+  // Deep sleep instead of a delay() loop so the radio and CPU actually power
+  // down between checks - a busy-wait loop draws close to full current the
+  // whole 15 minutes, which would drain a battery in hours, not weeks.
+  WiFi.disconnect(true);
+  Serial.printf("Sleeping for %lu ms\n", (unsigned long) CHECK_INTERVAL_MS);
+  Serial.flush();
+  esp_sleep_enable_timer_wakeup((uint64_t) CHECK_INTERVAL_MS * 1000ULL);
+  esp_deep_sleep_start();
 }
 
 void loop() {
-  if (millis() - lastCheckMs >= CHECK_INTERVAL_MS) {
-    lastCheckMs = millis();
-
-    if (WiFi.status() != WL_CONNECTED) {
-      Serial.println("WiFi dropped, reconnecting...");
-      connectWiFi();
-    }
-
-    checkAndUpdateDisplay();
-  }
-
-  delay(1000);
+  // Unreachable: setup() ends in deep sleep, and waking from deep sleep
+  // re-runs setup() from scratch rather than resuming here.
 }

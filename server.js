@@ -135,6 +135,22 @@ app.get("/api/settings", handleErrors(async (req, res) => {
   res.json(readSettings());
 }));
 
+// The ESP reports its battery reading here once per wake cycle (every 15
+// min), right before it goes back to deep sleep - this is the only signal
+// the server has of the device's power state, so the UI just shows the most
+// recent report as-is rather than trying to model discharge over time.
+app.post("/api/battery", handleErrors(async (req, res) => {
+  const voltageMv = Number(req.body.voltageMv);
+  const percent = Number(req.body.percent);
+  if (!Number.isFinite(voltageMv) || !Number.isFinite(percent)) {
+    throw new Error("voltageMv and percent must be numbers");
+  }
+  const settings = writeSettings({
+    battery: { voltageMv, percent, updatedAt: new Date().toISOString() },
+  });
+  res.json({ ok: true, battery: settings.battery });
+}));
+
 // Enables/disables a server-side timer that periodically picks a new random
 // photo from a folder and renders it to OUT_PATH - runs independently of the
 // browser being open, since the ESP just polls OUT_PATH on its own schedule.
