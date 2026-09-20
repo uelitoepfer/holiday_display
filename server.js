@@ -174,13 +174,12 @@ app.post("/api/auto-shuffle", handleErrors(async (req, res) => {
   const { enabled, folder, intervalMinutes, orientation, params } = req.body;
   const orient = ["landscape", "portrait", "either"].includes(orientation) ? orientation : "either";
 
-  if (enabled) {
-    const dir = resolveFolder(folder || "");
-    const candidates = await filterByOrientation(listPhotosRecursive(dir), orient);
-    if (candidates.length === 0) {
-      throw new Error(`no ${orient === "either" ? "" : orient + " "}photos found under ${folder || "/"}`);
-    }
-  }
+  // Used to validate the folder/orientation combo here before responding,
+  // but filterByOrientation shells out to `identify` per photo over the NAS
+  // mount - for a folder with hundreds of photos that's 60-90+ seconds,
+  // which made the start button in the UI look hung. Save + respond
+  // immediately instead and let the first tick (fired right after, in the
+  // background) surface problems via the server log rather than the button.
   const settings = writeSettings({
     autoShuffle: {
       enabled: !!enabled,
@@ -202,20 +201,24 @@ function scheduleAutoShuffle(settings) {
   if (!settings.autoShuffle?.enabled) return;
 
   const ms = Math.max(1, settings.autoShuffle.intervalMinutes) * 60_000;
-  autoShuffleTimer = setInterval(async () => {
-    try {
-      const current = readSettings();
-      const dir = resolveFolder(current.autoShuffle.folder || "");
-      const files = await filterByOrientation(listPhotosRecursive(dir), current.autoShuffle.orientation);
-      if (files.length === 0) throw new Error(`no photos found under ${current.autoShuffle.folder}`);
-      const chosen = pickRandom(files);
-      await ditherToSpectra6(chosen, OUT_PATH, current.params);
-      writeSettings({ photo: toRelPath(chosen), folder: current.autoShuffle.folder });
-      console.log(`[ok] auto-shuffle rendered ${toRelPath(chosen)}`);
-    } catch (err) {
-      console.error("[warn] auto-shuffle tick failed:", err.message);
-    }
-  }, ms);
+  autoShuffleTimer = setInterval(runAutoShuffleTick, ms);
+  runAutoShuffleTick(); // don't wait for the first interval to pick something
+}
+
+async function runAutoShuffleTick() {
+  try {
+    const current = readSettings();
+    if (!current.autoShuffle?.enabled) return; // disabled again before this fired
+    const dir = resolveFolder(current.autoShuffle.folder || "");
+    const files = await filterByOrientation(listPhotosRecursive(dir), current.autoShuffle.orientation);
+    if (files.length === 0) throw new Error(`no photos found under ${current.autoShuffle.folder}`);
+    const chosen = pickRandom(files);
+    await ditherToSpectra6(chosen, OUT_PATH, current.params);
+    writeSettings({ photo: toRelPath(chosen), folder: current.autoShuffle.folder });
+    console.log(`[ok] auto-shuffle rendered ${toRelPath(chosen)}`);
+  } catch (err) {
+    console.error("[warn] auto-shuffle tick failed:", err.message);
+  }
 }
 
 const PORT = process.env.PORT || 4173;
