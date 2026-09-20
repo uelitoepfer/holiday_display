@@ -323,6 +323,9 @@ createApp({
           <span class="battery-icon" :class="{ low: battery.percent <= 20 }">🔋</span>
           {{ battery.percent }}% <span class="battery-age" v-if="batteryAgeLabel">· {{ batteryAgeLabel }}</span>
         </div>
+        <div class="battery-stat" v-else title="No battery report from the display yet">
+          <span class="battery-icon">🔋</span> no data yet
+        </div>
         <div class="palette-strip" title="Spectra 6 panel palette">
           <span class="swatch" style="--c:#000000"></span>
           <span class="swatch" style="--c:#FFFFFF"></span>
