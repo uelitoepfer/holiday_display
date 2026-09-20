@@ -53,12 +53,17 @@ static const uint32_t DEFAULT_CHECK_INTERVAL_MS = 15UL * 60UL * 1000UL;
 static const uint32_t MIN_CHECK_INTERVAL_MS = 60UL * 1000UL;         // 1 min
 static const uint32_t MAX_CHECK_INTERVAL_MS = 24UL * 60UL * 60UL * 1000UL;  // 24 h
 
-// The XIAO ESP32-S3's onboard battery-sense divider (BAT+ -> 1:2 divider ->
-// A0/GPIO1) - a standard feature of this board line, not something the EE04
-// expansion board adds or documents itself, so verify against a multimeter
-// if reported percentages look off.
+// The EE04 board's own battery-sense circuit (separate from the XIAO
+// module itself, which has no battery pin at all on the plain ESP32-S3) -
+// documented at wiki.seeedstudio.com/epaper_ee04/. The divider sits behind
+// a FET gated by ADC_ENABLE_PIN, presumably to stop it bleeding the battery
+// between reads - it must be driven HIGH before VOLTAGE_PIN reads anything
+// but 0.
 #ifndef BATTERY_ADC_PIN
-#define BATTERY_ADC_PIN A0
+#define BATTERY_ADC_PIN A0  // GPIO1
+#endif
+#ifndef BATTERY_ADC_ENABLE_PIN
+#define BATTERY_ADC_ENABLE_PIN A5  // GPIO6
 #endif
 static const uint32_t BATTERY_EMPTY_MV = 3300;  // ~0% for a single-cell LiPo
 static const uint32_t BATTERY_FULL_MV = 4200;   // ~100% for a single-cell LiPo
@@ -174,16 +179,19 @@ bool checkAndUpdateDisplay() {
 // Best-effort: failing to reach the server shouldn't block going back to
 // sleep, so errors here are just logged.
 void reportBattery() {
-  // analogReadMilliVolts() relies on this chip's ADC calibration eFuse data,
-  // which isn't set on this board - it silently falls back to a "Default
-  // Vref: 0" characterization and reports 0mV no matter the real voltage
-  // (confirmed via Serial log: "ADC1: Characterized using Default Vref: 0").
-  // Read the raw counts and scale by hand instead; without factory
-  // calibration this is only accurate to within about +-5%.
+  pinMode(BATTERY_ADC_ENABLE_PIN, OUTPUT);
+  digitalWrite(BATTERY_ADC_ENABLE_PIN, HIGH);
+  delay(10);  // Seeed's own EE04 sample code settles the divider this long before reading
+
+  // Also avoids analogReadMilliVolts()'s eFuse-based calibration, which
+  // isn't set on this chip and would silently report 0mV regardless of the
+  // real voltage - same as Seeed's own EE04 sample code (voltage =
+  // adcValue/4096 * 7.16), not derived from the raw divider ratio.
   analogReadResolution(12);
-  analogSetPinAttenuation(BATTERY_ADC_PIN, ADC_11db);
-  uint32_t raw = analogRead(BATTERY_ADC_PIN);
-  uint32_t milliVolts = (raw * 3300UL / 4095UL) * 2;  // 11dB range ~3300mV, divider is 1:2
+  int adcValue = analogRead(BATTERY_ADC_PIN);
+  digitalWrite(BATTERY_ADC_ENABLE_PIN, LOW);  // stop bleeding the battery through the divider
+
+  uint32_t milliVolts = (uint32_t) ((adcValue / 4096.0f) * 7.16f * 1000.0f);
   int percent = constrain(
       map(milliVolts, BATTERY_EMPTY_MV, BATTERY_FULL_MV, 0, 100), 0, 100);
   Serial.printf("Battery: %u mV (%d%%)\n", milliVolts, percent);
